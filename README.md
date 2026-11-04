@@ -186,6 +186,8 @@ Saída verificada localmente e no GitHub Actions:
    └── [Destroy]   Destroy complete! Resources: 37 destroyed.
 ```
 
+![Execução E2E do OpenTofu + Floci (37 recursos, Smoke Tests, OIDC e Destroy)](docs/screenshots/floci-e2e-lifecycle.png)
+
 > [!TIP]
 > **Endpoint & Healthcheck da Floci:** Com o emulador rodando (`make up`), consulte o status em `http://localhost:4566/_floci/health` ou inspecione qualquer recurso via `aws --endpoint-url http://localhost:4566 ...`.
 
@@ -249,7 +251,12 @@ git push -u origin feat/ajuste-tag-orcamento
 gh pr create --fill
 ```
 
-Assim que o job **E2E Apply, OIDC & Destroy (Floci)** executar no PR, o bot `github-actions[bot]` publicará (ou atualizará) um comentário no próprio PR contendo a tabela de custos por hora/mês e a saída completa do `tofu plan`.
+Assim que o job **E2E Apply, OIDC & Destroy (Floci)** executar no PR, o bot `github-actions[bot]` publicará (ou atualizará) um comentário no próprio PR contendo a tabela de custos por hora/mês e a saída completa do `tofu plan`:
+
+* **Evidência Real de Comentário Automático (`tofu plan` + FinOps) no PR:**
+  - **Pull Request:** [PR #9 (`feat: infrastructure modules, Floci local environment, and CI/CD pipeline`)](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack/pull/9)
+
+![Comentário Automático de OpenTofu Plan + FinOps Report no PR #9](docs/screenshots/pr-tofu-plan-finops.png)
 
 ---
 
@@ -328,3 +335,16 @@ Para quem abre uma **nova conta AWS** no modelo atual de Free Tier baseado em cr
 2. **Certificado TLS (ACM) + Redirecionamento HTTP → HTTPS no ALB:** Com um domínio no Route53, adicionaria um listener na porta `443` com certificado gratuito do AWS Certificate Manager (ACM).
 3. **State Encryption Nativo do OpenTofu (`encryption {}` block):** Criptografaria o próprio conteúdo do `.tfstate` em trânsito e repouso usando chave KMS antes mesmo de enviá-lo ao S3.
 4. **ECS Fargate Spot ou AWS App Runner:** Para cargas variáveis, substituir o ALB + EC2 por Fargate Spot ou App Runner pode reduzir ainda mais o custo base do Load Balancer.
+
+---
+
+## 10. Série Completa do Portfólio DevOps & SRE (5 Projetos Conectados)
+
+| # | Projeto | Repositório Oficial | CI Status |
+|:---:|---|---|---|
+| **1** | **Containerização & Pipeline CI/CD (DevSecOps)** | [`Gabriel-V-Mendes/Containeriza-oPipelineCICD`](https://github.com/Gabriel-V-Mendes/Containeriza-oPipelineCICD) | [![CI/CD](https://github.com/Gabriel-V-Mendes/Containeriza-oPipelineCICD/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gabriel-V-Mendes/Containeriza-oPipelineCICD/actions/workflows/ci.yml) |
+| **2** | **Infraestrutura AWS com OpenTofu & Floci (FinOps + OIDC)** *(este repo)* | [`Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack`](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack) | [![Infra CI/CD](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack/actions/workflows/infra-ci.yml/badge.svg?branch=main)](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack/actions/workflows/infra-ci.yml) |
+| **3** | **GitOps & Kubernetes (ArgoCD + Kustomize + Gateway API + Sealed Secrets)** | [`Gabriel-V-Mendes/GitOps_Kubernets`](https://github.com/Gabriel-V-Mendes/GitOps_Kubernets) | [![GitOps CI](https://github.com/Gabriel-V-Mendes/GitOps_Kubernets/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/Gabriel-V-Mendes/GitOps_Kubernets/actions/workflows/validate.yml) |
+| **4** | **Observabilidade & SRE (Prometheus + Grafana Alloy + Loki + Alertmanager)** | [`Gabriel-V-Mendes/Observabilidade`](https://github.com/Gabriel-V-Mendes/Observabilidade) | [![Observability CI](https://github.com/Gabriel-V-Mendes/Observabilidade/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gabriel-V-Mendes/Observabilidade/actions/workflows/ci.yml) |
+| **5** | **Platform Engineering & Golden Path (IDP + Reusable Workflows + TF Modules)** | [`Gabriel-V-Mendes/platform-engineering`](https://github.com/Gabriel-V-Mendes/platform-engineering) | [![Platform CI](https://github.com/Gabriel-V-Mendes/platform-engineering/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gabriel-V-Mendes/platform-engineering/actions/workflows/ci.yml) |
+
