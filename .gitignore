@@ -23,4 +23,4 @@ environments/aws-prod/backend.hcl
 # Dados locais do emulador Floci e notas pessoais de estudo
 data/
 floci-data/
-docs/
+docs/GUIA_DE_ESTUDO.md
