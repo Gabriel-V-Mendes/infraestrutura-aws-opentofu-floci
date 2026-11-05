@@ -84,7 +84,10 @@ jwt = sys.argv[1]
 payload = jwt.split(".")[1]
 payload += "=" * (-len(payload) % 4)
 data = json.loads(base64.urlsafe_b64decode(payload))
-print(f"iss={data.get(\"iss\")} | sub={data.get(\"sub\")} | aud={data.get(\"aud\")}")
+iss = data.get("iss", "")
+sub = data.get("sub", "")
+aud = data.get("aud", "")
+print("iss=" + str(iss) + " | sub=" + str(sub) + " | aud=" + str(aud))
 ' "$OIDC_JWT")
   echo "    Token OIDC real emitido pelo GitHub: ${CLAIMS}"
 else
