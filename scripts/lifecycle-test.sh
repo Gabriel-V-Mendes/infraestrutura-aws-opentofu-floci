@@ -10,7 +10,7 @@ export FLOCI_ENDPOINT="${FLOCI_ENDPOINT:-http://localhost:4566}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-floci-ephemeral}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-floci-ephemeral}"
-export TF_VAR_db_password="${TF_VAR_db_password:-FlociTestStrongPwd_2026!}"
+export TF_VAR_db_password="${TF_VAR_db_password:-$(openssl rand -hex 16)}"
 export TF_VAR_floci_endpoint="$FLOCI_ENDPOINT"
 
 # 1. Bootstrap do bucket de state

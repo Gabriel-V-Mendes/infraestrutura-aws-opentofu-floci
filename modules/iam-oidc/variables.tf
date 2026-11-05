@@ -11,7 +11,7 @@ variable "environment" {
 variable "github_repository" {
   description = "Repositorio do GitHub autorizado a assumir a role via OIDC (formato owner/repo)"
   type        = string
-  default     = "Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack"
+  default     = "Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci"
 }
 
 variable "state_bucket_name" {

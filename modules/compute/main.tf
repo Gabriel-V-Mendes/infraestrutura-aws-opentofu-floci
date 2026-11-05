@@ -15,12 +15,13 @@ terraform {
 # - Auto Scaling Group de 1 instância EC2 pequena (t4g.micro / t3.micro)
 # ==============================================================================
 
+# Justificativa trivy:ignore:AVD-AWS-0053: O Application Load Balancer e intencionalmente internet-facing (internal = false) pois atua como ponto unico de entrada HTTP para os clientes externos; as instancias EC2 e o RDS nao aceitam trafego direto da internet.
 # trivy:ignore:AVD-AWS-0053
 resource "aws_lb" "app" {
-  # checkov:skip=CKV_AWS_91:Access logs no S3 omitidos para evitar custo adicional no ambiente de teste
-  # checkov:skip=CKV_AWS_150:Deletion protection desabilitada para permitir destroy completo ao final dos testes
-  # checkov:skip=CKV2_AWS_20:Redirecionamento HTTPS requer certificado ACM/dominio real; no Floci/teste usamos HTTP na porta 80
-  # checkov:skip=CKV2_AWS_28:WAFv2 omitido por design economico (WAF tem custo fixo alto por ACL na AWS)
+  # checkov:skip=CKV_AWS_91:Access logs do ALB em S3 omitidos para evitar custo adicional de storage no ambiente de laboratorio.
+  # checkov:skip=CKV_AWS_150:Deletion protection desabilitada para permitir execucao automatizada de tofu destroy ao final dos testes de ciclo de vida.
+  # checkov:skip=CKV2_AWS_20:Redirecionamento HTTP->HTTPS exige dominio registrado e certificado ACM valido; no laboratorio sem dominio proprio o listener opera em HTTP (porta 80).
+  # checkov:skip=CKV2_AWS_28:AWS WAFv2 omitido por decisao FinOps (WAF possui custo fixo mensal por Web ACL e Rule fora do escopo economico do laboratorio).
   name                       = "${var.project_name}-${var.environment}-alb"
   internal                   = false
   load_balancer_type         = "application"
@@ -59,10 +60,11 @@ resource "aws_lb_target_group" "app" {
   }
 }
 
+# Justificativa trivy:ignore:AVD-AWS-0054: O listener do ALB usa protocolo HTTP na porta 80 no ambiente de emulacao/laboratorio por nao haver dominio DNS publico nem certificado ACM; em producao com Route53 + ACM habilita-se HTTPS 443 (TLS 1.3) com redirect 301 na porta 80.
 # trivy:ignore:AVD-AWS-0054
 resource "aws_lb_listener" "http" {
-  # checkov:skip=CKV_AWS_2:Listener HTTP usado no ambiente de emulacao/teste sem dominio ACM
-  # checkov:skip=CKV_AWS_103:TLS 1.2 se aplica quando um certificado ACM HTTPS estiver configurado
+  # checkov:skip=CKV_AWS_2:Listener HTTP usado no ambiente de emulacao/laboratorio sem dominio publico registrado no ACM.
+  # checkov:skip=CKV_AWS_103:Politica TLS 1.2+ aplica-se quando o protocolo HTTPS e certificado ACM estao configurados.
   load_balancer_arn = aws_lb.app.arn
   port              = 80
   protocol          = "HTTP"

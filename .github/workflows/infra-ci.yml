@@ -106,12 +106,17 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: floci-ephemeral
       AWS_SECRET_ACCESS_KEY: floci-ephemeral
-      TF_VAR_db_password: "FlociCiStrongPassword_2026!"
       TF_VAR_floci_endpoint: "http://localhost:4566"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Gerar senha efêmera por execução para o RDS (zero senhas fixas)
+        run: |
+          DB_PASS="$(openssl rand -hex 16)"
+          echo "::add-mask::${DB_PASS}"
+          echo "TF_VAR_db_password=${DB_PASS}" >> "$GITHUB_ENV"
 
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
         with:
@@ -236,37 +241,46 @@ jobs:
         run: docker compose down -v
 
   # ============================================================================
-  # 5. Deploy em Conta AWS Real via OIDC (Opcional, ativado via variável)
+  # 5. Ciclo Real na AWS via OIDC (Orçamento/Alarmes -> Apply -> Smoke -> Destroy)
+  #    Ativado quando vars.AWS_PROD_ENABLED == 'true' e AWS_OIDC_ROLE_ARN configurado
   # ============================================================================
   aws-prod-oidc:
-    name: Deploy AWS Prod (OIDC Keyless)
+    name: Deploy & Destroy AWS Real (OIDC Keyless)
     needs: [floci-e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_PROD_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     environment: production
     permissions:
       contents: read
-      id-token: write # Obrigatório para solicitar JWT OIDC ao provedor do GitHub
+      id-token: write # Obrigatório para solicitar JWT OIDC real ao provedor do GitHub
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Autenticar na AWS via OIDC (Sem chaves estáticas!)
+      - name: Gerar senha efêmera por execução para o RDS
+        run: |
+          DB_PASS="$(openssl rand -hex 20)"
+          echo "::add-mask::${DB_PASS}"
+          echo "TF_VAR_db_password=${DB_PASS}" >> "$GITHUB_ENV"
+
+      - name: Autenticar na AWS Real via OIDC (Sem chaves estáticas e sem JWT sintético)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_DEFAULT_REGION }}
 
+      - name: Confirmar identidade OIDC assumida na AWS Real
+        run: aws sts get-caller-identity
+
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
         with:
           tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
 
-      - name: OpenTofu Init & Plan (AWS Prod)
+      - name: OpenTofu Init, Apply (com Budgets + Alarmes) e Destroy na AWS Real
         working-directory: environments/aws-prod
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         run: |
           tofu init -backend-config="bucket=${{ vars.AWS_STATE_BUCKET }}" \
             -backend-config="key=aws-prod/terraform.tfstate" \
@@ -274,4 +288,6 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true" \
             -input=false -no-color
-          tofu plan -input=false -no-color
+          tofu plan -input=false -no-color -out=tfplan
+          tofu apply -input=false -auto-approve -no-color tfplan
+          tofu destroy -input=false -auto-approve -no-color

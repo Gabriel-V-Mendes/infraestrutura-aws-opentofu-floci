@@ -64,7 +64,7 @@ variable "instance_type" {
 variable "app_image" {
   description = "Imagem Docker da FastAPI publicada no GHCR pelo pipeline do Projeto 1"
   type        = string
-  default     = "ghcr.io/gabriel-v-mendes/containeriza-opipelinecicd:latest"
+  default     = "ghcr.io/gabriel-v-mendes/containerizacaopipelinecicd:latest"
 }
 
 variable "min_size" {

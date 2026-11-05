@@ -13,7 +13,7 @@ gh api --method PUT "/repos/${REPO}/branches/main/protection" \
     "contexts": [
       "Format & Validate (OpenTofu)",
       "Secret Scan (Gitleaks)",
-      "IaC Security Scan (Trivy & Checkov)",
+      "IaC Security Scan (Trivy Config)",
       "E2E Apply, OIDC & Destroy (Floci)"
     ]
   },

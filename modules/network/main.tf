@@ -15,10 +15,11 @@ terraform {
 # - Isolamento garantido por Security Groups estritos em 3 camadas (ALB -> EC2 -> RDS)
 # ==============================================================================
 
+# Justificativa trivy:ignore:AVD-AWS-0178: VPC Flow Logs omitidos por padrao na arquitetura economica de laboratorio para evitar custo continuo de ingestao e armazenamento no CloudWatch Logs/S3.
 # trivy:ignore:AVD-AWS-0178
 resource "aws_vpc" "main" {
-  # checkov:skip=CKV2_AWS_11:VPC Flow Logs omitidos por padrao na arquitetura economica (evita custo continuo de ingestao no CloudWatch Logs)
-  # checkov:skip=CKV2_AWS_12:Isolamento feito via Security Groups dedicados por camada (alb, app, db)
+  # checkov:skip=CKV2_AWS_11:VPC Flow Logs omitidos por padrao na arquitetura economica (evita custo continuo de ingestao no CloudWatch Logs).
+  # checkov:skip=CKV2_AWS_12:O Default Security Group da VPC nao e associado a nenhum recurso; o isolamento real e feito por 3 Security Groups dedicados (alb, app, db).
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
@@ -75,9 +76,10 @@ resource "aws_route_table_association" "public" {
 # ==============================================================================
 # Camada 1: Security Group do Application Load Balancer (ALB)
 # ==============================================================================
+# Justificativa trivy:ignore:AVD-AWS-0107: O Application Load Balancer e a borda publica da arquitetura e precisa aceitar conexoes HTTP/HTTPS (80/443) dos clientes na internet (var.allowed_ingress_cidrs) para encaminha-las exclusivamente a porta 8000 das instancias EC2 na VPC.
 # trivy:ignore:AVD-AWS-0107
 resource "aws_security_group" "alb" {
-  # checkov:skip=CKV_AWS_260:ALB publico precisa aceitar HTTP (porta 80) da internet para receber trafego dos clientes
+  # checkov:skip=CKV_AWS_260:ALB publico de borda precisa aceitar HTTP (porta 80) de var.allowed_ingress_cidrs para receber trafego externo no ambiente sem dominio ACM.
   name        = "${var.project_name}-${var.environment}-alb-sg"
   description = "Permite entrada HTTP/HTTPS da internet e saida exclusiva para a porta 8000 da API na VPC"
   vpc_id      = aws_vpc.main.id
@@ -115,9 +117,10 @@ resource "aws_security_group" "alb" {
 # ==============================================================================
 # Camada 2: Security Group da Aplicação FastAPI (EC2 / Auto Scaling)
 # ==============================================================================
+# Justificativa trivy:ignore:AVD-AWS-0104: A instancia EC2 da API precisa de egress TCP 443 para 0.0.0.0/0 para baixar a imagem de container do GitHub Container Registry (GHCR) e consultar as APIs AWS (Secrets Manager e SSM) sem incorrer no custo de NAT Gateway ou Interface Endpoints pagos.
 # trivy:ignore:AVD-AWS-0104
 resource "aws_security_group" "app" {
-  # checkov:skip=CKV_AWS_382:Instancia EC2 em subnet publica sem NAT Gateway precisa de saida 443 para baixar a imagem Docker do GHCR
+  # checkov:skip=CKV_AWS_382:Instancia EC2 em subnet publica sem NAT Gateway precisa de saida TCP 443 (0.0.0.0/0) para pull da imagem Docker no GHCR e acesso ao Secrets Manager/SSM.
   name        = "${var.project_name}-${var.environment}-app-sg"
   description = "Aceita porta 8000 SOMENTE do ALB; permite saida 5432 para o RDS na VPC e 443 para pull do GHCR"
   vpc_id      = aws_vpc.main.id

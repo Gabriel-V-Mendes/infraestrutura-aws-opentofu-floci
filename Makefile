@@ -5,7 +5,7 @@ SHELL := /bin/bash
 ENV_DIR ?= environments/floci-local
 FLOCI_ENDPOINT ?= http://localhost:4566
 AWS_REGION ?= us-east-1
-TF_VAR_db_password ?= FlociTestStrongPwd_2026!
+TF_VAR_db_password ?= $(shell openssl rand -hex 16)
 
 export FLOCI_ENDPOINT
 export AWS_DEFAULT_REGION := $(AWS_REGION)

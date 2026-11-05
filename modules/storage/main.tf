@@ -43,7 +43,8 @@ resource "aws_kms_key" "main" {
         }
         Action = [
           "kms:Decrypt",
-          "kms:GenerateDataKey*"
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext"
         ]
         Resource = "*"
       }
@@ -61,11 +62,12 @@ resource "aws_kms_alias" "main" {
   target_key_id = aws_kms_key.main.key_id
 }
 
+# Justificativa trivy:ignore:AVD-AWS-0089: S3 Server Access Logging omitido por decisao FinOps para evitar provisionar um segundo bucket recursivo de logs de acesso no laboratorio; auditoria de chamadas S3 em producao e feita via AWS CloudTrail Data Events.
 # trivy:ignore:AVD-AWS-0089
 resource "aws_s3_bucket" "artifacts" {
-  # checkov:skip=CKV_AWS_18:Access logging omitido para evitar bucket recursivo de logs na arquitetura economica
-  # checkov:skip=CKV_AWS_144:Cross-region replication desabilitado por design economico Single-Region
-  # checkov:skip=CKV2_AWS_62:Event notifications opcionais para o bucket de artefatos/backups
+  # checkov:skip=CKV_AWS_18:Access logging omitido para evitar bucket recursivo de logs na arquitetura economica; em producao usa-se CloudTrail Data Events.
+  # checkov:skip=CKV_AWS_144:Cross-region replication desabilitado por design economico Single-Region (us-east-1).
+  # checkov:skip=CKV2_AWS_62:Event notifications S3 omitidas pois o bucket armazena apenas artefatos estaticos e backups sem gatilho Lambda/SQS.
   bucket        = "${var.project_name}-${var.environment}-artifacts"
   force_destroy = var.force_destroy
 

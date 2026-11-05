@@ -25,7 +25,7 @@ variable "state_bucket_name" {
 variable "github_repository" {
   description = "Repositorio GitHub autorizado na federacao OIDC"
   type        = string
-  default     = "Gabriel-V-Mendes/infraestrutura-aws-terraform-localstack"
+  default     = "Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci"
 }
 
 variable "monthly_budget_usd" {
@@ -127,5 +127,5 @@ variable "ec2_instance_type" {
 variable "app_image" {
   description = "Imagem Docker da FastAPI publicada no GHCR"
   type        = string
-  default     = "ghcr.io/gabriel-v-mendes/containeriza-opipelinecicd:latest"
+  default     = "ghcr.io/gabriel-v-mendes/containerizacaopipelinecicd:latest"
 }
