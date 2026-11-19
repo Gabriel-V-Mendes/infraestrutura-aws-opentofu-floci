@@ -1,8 +1,8 @@
 # Emulador AWS local open-source (Floci - https://github.com/floci-io/floci)
-# Substitui o LocalStack Community (descontinuado em 03/2026) e o AWS Free Tier:
+# Adotado para validação local e em CI sem exigir LOCALSTACK_AUTH_TOKEN (obrigatório na imagem unificada do LocalStack desde a release 2026.03.0):
 # - Sem conta AWS, sem auth token, sem feature gates (licença MIT)
-# - Boot nativo Quarkus/GraalVM em ~24 ms e ~13 MiB de RAM ociosa
-# - Console Web sob demanda em: http://localhost:4566/_floci/ui
+# - Medição local (floci/floci:2.3.0): boot do processo nativo Quarkus 3.40.1/GraalVM em 0.673s (docker logs) e ~39.11 MiB de RAM ociosa (docker stats --no-stream)
+# - Healthcheck HTTP em: http://localhost:4566/_floci/health
 name: floci-aws-emulator
 
 services:

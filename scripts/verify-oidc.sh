@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Valida a autenticação OIDC sem chaves estáticas (sts:AssumeRoleWithWebIdentity),
-# a Trust Policy restrita (apenas ref:refs/heads/main e environment:production)
-# e a ausência de curingas amplos (ec2:*, rds:*, kms:*, secretsmanager:*).
-# No GitHub Actions (permissions: id-token: write), requisita um JWT OIDC REAL
-# diretamente do provedor https://token.actions.githubusercontent.com.
+# Valida no emulador Floci (:4566) a configuração de federação OIDC sem chaves estáticas:
+# 1. Trust Policy restrita (apenas ref:refs/heads/main e environment:production)
+# 2. Role Policy de menor privilégio sem curingas de serviço (ec2:*, rds:*, kms:*, secretsmanager:*, s3:*)
+# 3. Chamada sts:AssumeRoleWithWebIdentity contra o endpoint STS emulado do Floci
+#    (usando o JWT do GitHub Actions quando presente no runner ou um token local de teste).
+# Nota: Este script testa o contrato STS/IAM no emulador Floci; não realiza federação contra o STS da AWS real (sts.amazonaws.com).
 set -euo pipefail
 
 FLOCI_ENDPOINT="${FLOCI_ENDPOINT:-http://localhost:4566}"

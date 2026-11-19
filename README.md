@@ -1,8 +1,13 @@
-# Infraestrutura AWS Econômica com OpenTofu & Floci (CI/CD + OIDC + FinOps)
+# Infraestrutura AWS Econômica com OpenTofu & Floci — OpenTofu validado em emulador (Floci) e plan contra a AWS
 
 [![Infra CI/CD](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci/actions/workflows/infra-ci.yml/badge.svg?branch=main)](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci/actions/workflows/infra-ci.yml)
 
-Infraestrutura na AWS declarada em **OpenTofu (1.10+)** com arquitetura enxuta voltada a **FinOps**, **Zero Chaves Estáticas (GitHub Actions OIDC com `sub` restrito e menor privilégio)**, **State em S3 com Lock Nativo (`use_lockfile = true`)**, validação DevSecOps com **Trivy Config / Checkov** e emulação local 100% open-source via **[Floci (`floci-io/floci`)](https://github.com/floci-io/floci)**.
+**OpenTofu validado em emulador (Floci) e `plan` contra a AWS** — infraestrutura declarada em **OpenTofu (1.10+)** com arquitetura enxuta voltada a **FinOps**, **Zero Chaves Estáticas (GitHub Actions OIDC com `sub` restrito e menor privilégio)**, **State em S3 com Lock Nativo (`use_lockfile = true`)**, validação DevSecOps com **Trivy Config / Checkov** e emulação local 100% open-source via **[Floci (`floci-io/floci`)](https://github.com/floci-io/floci)**.
+
+> [!IMPORTANT]
+> **Escopo real de validação deste repositório:** **OpenTofu validado em emulador (Floci) e `plan` contra a AWS** (nunca "infraestrutura na AWS validada").
+> - **O que roda a cada push/PR no CI:** formatação (`tofu fmt`), validação de schema dos ambientes `floci-local` e `aws-prod` (`tofu validate`), varredura de segredos (`gitleaks`), segurança estática (`trivy config`) e o ciclo completo `init → plan → apply (37 recursos) → smoke test → auditoria IAM/OIDC → destroy` contra o **emulador Floci (`:4566`)**.
+> - **O que NÃO roda no CI padrão:** não há troca de token OIDC contra o STS da AWS real (`sts.amazonaws.com`) nem `tofu apply` em conta AWS real, pois o repositório não conecta uma conta AWS ativa no pipeline padrão (veja a [§5.2](#52-escopo-honesto-emulador-floci-vs-conta-aws-real)).
 
 ---
 
@@ -95,8 +100,8 @@ flowchart LR
         Boot["Gera senha efêmera (openssl rand)\n+ Sobe Floci (:4566) + Bootstrap S3"]
         Plan["tofu init (use_lockfile=true)\n+ tofu plan"]
         Comment["Comenta Plan + Tabela FinOps\nno Pull Request"]
-        Apply["tofu apply (37 recursos)\n+ Smoke Test AWS CLI"]
-        OIDCTest["Teste OIDC com JWT Real do GitHub\n(ACTIONS_ID_TOKEN_REQUEST_URL)\n+ Auditoria Trust Policy & IAM"]
+        Apply["tofu apply no Floci (37 recursos)\n+ Smoke Test AWS CLI"]
+        OIDCTest["Auditoria Trust Policy & IAM\n+ AssumeRoleWithWebIdentity no STS emulado (Floci)"]
         Destroy["tofu destroy\n(Derruba 100% ao final)"]
         Boot --> Plan --> Comment --> Apply --> OIDCTest --> Destroy
     end
@@ -116,15 +121,15 @@ flowchart LR
 │   ├── database/                    # 5. RDS PostgreSQL 17.2 Single-AZ + Secrets Manager + SSM Parameter
 │   └── compute/                     # 6. ALB (/health/ready), Target Group, Launch Template (IMDSv2) e ASG (1x EC2)
 ├── environments/                    # Separação por diretórios de ambiente
-│   ├── floci-local/                 # Ambiente local e CI apontando para Floci (http://localhost:4566)
-│   └── aws-prod/                    # Ambiente AWS Real autenticado via OIDC (sem override de endpoints)
+│   ├── floci-local/                 # Ambiente local e CI validado em emulador Floci (http://localhost:4566)
+│   └── aws-prod/                    # Ambiente preparado para plan/apply contra a AWS via OIDC (sem override de endpoints)
 ├── scripts/
 │   ├── bootstrap-state.sh           # Inicializa o bucket S3 de state versionado
-│   ├── smoke-infra.sh               # Verifica os 37 recursos provisionados via AWS CLI
-│   ├── verify-oidc.sh               # Requisita JWT OIDC real no GitHub Actions, audita IAM e valida AssumeRoleWithWebIdentity
-│   ├── lifecycle-test.sh            # Orquestra init -> validate -> plan -> apply -> smoke -> OIDC -> destroy
+│   ├── smoke-infra.sh               # Verifica os 37 recursos provisionados no Floci via AWS CLI
+│   ├── verify-oidc.sh               # Audita Trust Policy/IAM e valida sts:AssumeRoleWithWebIdentity contra o STS emulado do Floci
+│   ├── lifecycle-test.sh            # Orquestra init -> validate -> plan -> apply -> smoke -> OIDC -> destroy no Floci
 │   └── protect-main.sh              # Ativa branch protection exigindo os 4 checks verdes na main
-└── .github/workflows/infra-ci.yml   # Pipeline declarativo completo com PR Plan Comment e job AWS Real parametrizado
+└── .github/workflows/infra-ci.yml   # Pipeline declarativo com PR Plan Comment (Floci) e job AWS Real parametrizado
 ```
 
 ### 2.4 Inventário dos 37 Recursos Provisionados (6 Módulos)
@@ -188,10 +193,10 @@ Saída verificada localmente e no GitHub Actions:
    ├── [Smoke 5/7] VPC (10.0.0.0/16), 2 Subnets Públicas, 0 NAT Gateways e 3 SGs estritos
    ├── [Smoke 6/7] RDS PostgreSQL Single-AZ (MultiAZ=False) + Secrets Manager DATABASE_URL
    ├── [Smoke 7/7] ALB (active) + Target Group (/health/ready) + ASG (DesiredCapacity=1)
-   ├── [OIDC 1/4]  Trust Policy validada: restrita exclusivamente a ref:refs/heads/main e environment:production
+   ├── [OIDC 1/4]  Trust Policy validada no Floci: restrita exclusivamente a ref:refs/heads/main e environment:production
    ├── [OIDC 2/4]  Menor privilégio validado: zero ec2:*, rds:*, kms:* ou secretsmanager:*
-   ├── [OIDC 3/4]  Token OIDC obtido (JWT real emitido pelo GitHub Actions no CI)
-   ├── [OIDC 4/4]  sts:AssumeRoleWithWebIdentity -> AssumedRoleUser + Temporary AccessKeyId (ASIA***)
+   ├── [OIDC 3/4]  Web Identity Token preparado para teste contra o endpoint STS do emulador Floci (:4566)
+   ├── [OIDC 4/4]  sts:AssumeRoleWithWebIdentity (Floci STS) -> AssumedRoleUser + Temporary AccessKeyId (ASIA***)
    └── [Destroy]   Destroy complete! Resources: 37 destroyed.
 ```
 
@@ -211,8 +216,21 @@ Saída verificada localmente e no GitHub Actions:
    - Em relação aos serviços: enquanto recursos básicos de *EC2 Auto Scaling* fazem parte do tier gratuito autenticado (*Hobby*), provedores avançados de **RDS** e **ELBv2 (ALB)** historicamente exigiram licença paga/Pro no LocalStack ou dependem de validação de conta via `LOCALSTACK_AUTH_TOKEN`.
    - Para que qualquer pessoa (ou runner de CI em fork/PR) possa clonar este repositório e rodar `make test` do zero **sem criar conta externa e sem configurar tokens proprietários**, adotamos o **Floci**.
 
-2. **Por que Floci (`floci-io/floci`) e nota transparente sobre sua maturidade:**
-   - **O que é o Floci:** Emulador local open-source (**licença MIT**) para AWS escrito em **Quarkus** e compilado para binário nativo via **GraalVM** (~13 MiB de RAM em repouso e ~24 ms de boot), que responde na porta `4566` sem exigir conta ou token (fontes: [Repositório oficial `floci-io/floci`](https://github.com/floci-io/floci) e [Documentação oficial `floci.io`](https://floci.io/)).
+2. **Por que Floci (`floci-io/floci`), método de medição local e nota transparente sobre sua maturidade:**
+   - **O que é o Floci:** Emulador local open-source (**licença MIT**) para AWS escrito em **Quarkus (`3.40.1`)** e compilado para binário nativo via **GraalVM**, que responde na porta `4566` sem exigir conta externa nem token de autenticação (fontes: [Repositório oficial `floci-io/floci`](https://github.com/floci-io/floci) e [Documentação oficial `floci.io`](https://floci.io/)).
+   - **Medição local reproduzível na máquina de teste (`floci/floci:2.3.0@sha256:e0b292df...` em Linux x86_64, Docker `29.9.2`):**
+     - **Tempo de boot do binário nativo:** **`0.673s` (`673 ms`)** para o processo Quarkus/GraalVM iniciar e escutar em `0.0.0.0:4566` (e **`3.0s`** até o container atingir `Healthy` no `docker compose up -d --wait`), medido diretamente na saída de `docker logs`:
+       ```text
+       INFO  [io.quarkus] floci 2.3.0 native (powered by Quarkus 3.40.1) started in 0.673s. Listening on: http://0.0.0.0:4566
+       ```
+     - **Consumo de RAM ociosa (container recém-iniciado):** **`39.11 MiB`**, medido via cgroup memory do Docker:
+       ```bash
+       docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}" floci-aws-emulator-floci-1
+       # NAME                         MEM USAGE / LIMIT     CPU %
+       # floci-aws-emulator-floci-1   39.11MiB / 15.48GiB   0.05%
+       ```
+     - **Tamanho da imagem em disco:** **`344,5 MB` (`328,6 MiB` descomprimida)**, medido via `docker image inspect floci/floci:2.3.0 --format "{{.Size}} bytes"` (`344533748 bytes`).
+     - *Nota sobre os números de divulgação do upstream (`~24 ms` e `~13 MiB` vs. `~143 MiB` / `−91%`):* Os valores de `~24 ms` de cold start e `~13 MiB` de RAM ociosa (comparados a `~143 MiB` do LocalStack) citados na literatura do projeto referem-se ao benchmark publicado pelo autor do Floci em uma build nativa mínima inicial ([Quarkus Blog — *Floci: Multi-Cloud Local Emulator Built with Quarkus and GraalVM*](https://quarkus.io/blog/floci-cloud-emulator/)), e **não** ao container `floci/floci:2.3.0` completo medido acima (`0.673s` de boot e `39.11 MiB` de RAM ociosa).
    - **Nota sobre maturidade e limitações do Floci:** O Floci é um projeto recente e em rápida evolução, com maturidade inferior à da AWS real e menor profundidade de simulação que o LocalStack comercial. No pipeline de CI ([`docker-compose.yml`](docker-compose.yml)), utilizamos os modos de control-plane (`FLOCI_SERVICES_EC2_MOCK=true` e `FLOCI_SERVICES_RDS_MOCK=true`) para validar rapidamente contratos de API da AWS, grafo de dependências do OpenTofu, lock de state no S3 e estrutura das políticas IAM/OIDC. **O Floci não substitui testes em conta AWS real** para validar roteamento real de pacotes em Security Groups/ALB, avaliação estrita de condições IAM pelo motor da AWS ou performance de banco de dados.
 
 ### 4.2 State em S3 com Lock Nativo (`use_lockfile = true`, sem DynamoDB)
@@ -227,7 +245,7 @@ A partir do OpenTofu 1.10 / Terraform 1.10, o backend `s3` suporta **S3 Native S
   - `repo:Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci:environment:production`
   Qualquer branch de feature ou Pull Request não autorizado é bloqueado na própria Trust Policy.
 - **Role Policy sem curingas amplos (`ec2:*`, `rds:*`, `kms:*`, `secretsmanager:*` removidos):** As ações da Role `github_actions_iac` em [`modules/iam-oidc/main.tf`](modules/iam-oidc/main.tf) são listadas explicitamente e restritas por ARN do projeto (`arn:aws:rds:...`, `arn:aws:secretsmanager:...`, `arn:aws:ssm:...`, `arn:aws:sns:...`, `arn:aws:cloudwatch:...`, `arn:aws:budgets:...`, `var.kms_key_arn`, `arn:aws:elasticloadbalancing:...`, `arn:aws:autoscaling:...`) ou pelas tags `aws:ResourceTag/Environment` e `aws:RequestTag/Environment`.
-- **Teste OIDC com Token Real no GitHub Actions:** Quando executado no GitHub Actions (`permissions: id-token: write`), o script [`scripts/verify-oidc.sh`](scripts/verify-oidc.sh) requisita um **JWT OIDC real assinado pelo provedor `https://token.actions.githubusercontent.com`** (via `ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com`) e valida tanto os claims reais do token quanto a chamada `sts:AssumeRoleWithWebIdentity`.
+- **Validação de OIDC no Emulador Floci vs. AWS Real:** No job `floci-e2e` do GitHub Actions, o script [`scripts/verify-oidc.sh`](scripts/verify-oidc.sh) audita o JSON da Trust Policy e da Role Policy criadas no emulador e exercita a chamada `sts:AssumeRoleWithWebIdentity` **contra o endpoint STS emulado do Floci (`http://localhost:4566`)**. **Não há troca de token OIDC contra o STS da AWS real (`sts.amazonaws.com`) nem `tofu apply` na AWS real** durante a execução padrão do CI (pois o job `aws-prod-oidc` permanece desabilitado sem uma conta AWS conectada).
 
 ### 4.4 Segurança Estática (`Trivy Config` & `Checkov`) e Justificativa de Cada Exceção
 
@@ -251,7 +269,7 @@ Todas as 6 regras `# trivy:ignore` e os `# checkov:skip` restantes no código po
 
 ---
 
-## 5. CI/CD, Comentário do `plan` no PR e Execução na AWS Real
+## 5. CI/CD, Comentário do `plan` no PR e Escopo em Relação à AWS Real
 
 Arquivo: [`.github/workflows/infra-ci.yml`](.github/workflows/infra-ci.yml)
 
@@ -260,11 +278,11 @@ Arquivo: [`.github/workflows/infra-ci.yml`](.github/workflows/infra-ci.yml)
 | **Format & Validate (OpenTofu)** | PR e push | `tofu fmt -check -recursive` + `tofu validate` em `floci-local` e `aws-prod` | Código fora do padrão ou erro de validação |
 | **Secret Scan (Gitleaks)** | PR e push | `gitleaks` em todo o histórico (`fetch-depth: 0`) | Qualquer chave estática ou segredo for detectado |
 | **IaC Security Scan (Trivy Config)** | PR e push | `trivy config` varrendo todos os módulos e ambientes | Houver qualquer misconfiguration `CRITICAL` ou `HIGH` não justificada |
-| **E2E Apply, OIDC & Destroy (Floci)** | Após os 3 acima | Gera senha efêmera → Sobe o Floci → Bootstrap S3 → `tofu init` → `tofu plan` → **Comenta o Plan + Tabela FinOps no PR** → `tofu apply` (37 recursos) → `smoke-infra.sh` → `verify-oidc.sh` (com JWT OIDC real do GitHub Actions) → `tofu destroy` | Qualquer etapa do ciclo de vida, auditoria IAM/OIDC ou smoke test falhar |
-| **Deploy & Destroy AWS Real (OIDC Keyless)** | Push na `main` se `AWS_PROD_ENABLED=true` | Solicita JWT OIDC real ao GitHub (`id-token: write`), assume `AWS_OIDC_ROLE_ARN` na AWS real (`aws sts get-caller-identity`), executa `tofu init` + `tofu apply` (com Budgets e Alarmes ativos) e em seguida `tofu destroy` | Falha de federação OIDC ou erro no ciclo `apply`/`destroy` |
+| **E2E Apply, OIDC & Destroy (Floci)** | Após os 3 acima | Gera senha efêmera → Sobe o Floci → Bootstrap S3 → `tofu init` → `tofu plan` → **Comenta o Plan + Tabela FinOps no PR** → `tofu apply` no Floci (37 recursos) → `smoke-infra.sh` → `verify-oidc.sh` (contra o STS emulado do Floci) → `tofu destroy` | Qualquer etapa do ciclo de vida no emulador, auditoria IAM/OIDC ou smoke test falhar |
+| **Deploy & Destroy AWS Real (OIDC Keyless)** | Push na `main` somente se `AWS_PROD_ENABLED=true` *(não executado no CI padrão)* | Quando conectado a uma conta AWS, solicita JWT OIDC ao GitHub (`id-token: write`), assume `AWS_OIDC_ROLE_ARN` no STS real (`aws sts get-caller-identity`) e executa `tofu init` + `tofu plan` + `tofu apply` + `tofu destroy` | Falha de federação OIDC ou erro no ciclo contra a AWS |
 
-* **Evidência do CI (GitHub Actions):**
-  [Run #41869803247 no GitHub Actions](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci/actions/runs/41869803247) (todos os jobs `Format & Validate`, `Secret Scan`, `IaC Security Scan` e `E2E Apply, OIDC & Destroy` aprovados na branch `main`).
+* **Evidência do CI (GitHub Actions — OpenTofu validado em emulador Floci):**
+  [Run #41869803247 no GitHub Actions](https://github.com/Gabriel-V-Mendes/infraestrutura-aws-opentofu-floci/actions/runs/41869803247) (jobs `Format & Validate`, `Secret Scan`, `IaC Security Scan` e `E2E Apply, OIDC & Destroy (Floci)` aprovados na branch `main`).
 
 ### 5.1 Proteção da Branch `main` e Comentário Automático no PR
 
@@ -275,11 +293,11 @@ A branch `main` é protegida via [`scripts/protect-main.sh`](scripts/protect-mai
 
 ![Comentário Automático de OpenTofu Plan + FinOps Report no PR #9](docs/screenshots/pr-tofu-plan-finops.png)
 
-### 5.2 Como Executar o Job `aws-prod-oidc` em uma Conta AWS Real
+### 5.2 Escopo Honesto: Emulador Floci vs. Conta AWS Real
 
 > [!NOTE]
-> **Por que a execução em conta AWS real fica parametrizada (`vars.AWS_PROD_ENABLED == 'true'`)?**
-> A conta AWS pessoal do autor é antiga (criada antes de julho de 2025) e não é elegível aos créditos do novo AWS Free Tier, de modo que qualquer execução real gera cobrança imediata em cartão. Por transparência técnica e responsabilidade FinOps, não simulamos nem forjamos capturas de cobrança da AWS: deixamos o job `aws-prod-oidc` em [`.github/workflows/infra-ci.yml`](.github/workflows/infra-ci.yml) pronto para assumir a role via OIDC real, aplicar a infraestrutura com `aws_budgets_budget` + alarmes ligados e executar `tofu destroy` imediatamente em seguida assim que uma conta AWS for conectada.
+> **Por que este projeto é descrito como "OpenTofu validado em emulador (Floci) e `plan` contra a AWS" (e nunca como "infraestrutura na AWS validada")?**
+> A conta AWS pessoal do autor é antiga (criada antes de julho de 2025) e não é elegível aos créditos do novo AWS Free Tier, de modo que qualquer `tofu apply` real gera cobrança imediata em cartão. Por transparência técnica e responsabilidade FinOps, **não houve troca de token OIDC contra o STS de uma conta AWS real nem execução de `tofu apply` na AWS real**, e nenhuma evidência de execução na AWS foi simulada ou forjada. O pipeline comprova o ciclo completo (`init → plan → apply → smoke → destroy`) no emulador **Floci (`:4566`)** e deixa o diretório [`environments/aws-prod`](environments/aws-prod/main.tf) e o job `aws-prod-oidc` em [`.github/workflows/infra-ci.yml`](.github/workflows/infra-ci.yml) prontos para `tofu plan` / `tofu apply` contra uma conta AWS real quando `vars.AWS_PROD_ENABLED == 'true'`.
 
 Para executar o ciclo real na sua conta AWS:
 1. Crie o provedor OIDC `token.actions.githubusercontent.com` e a role inicial (ou execute o bootstrap uma única vez) confiando em `repo:<seu-usuario>/infraestrutura-aws-opentofu-floci:environment:production`.
@@ -293,20 +311,20 @@ Para executar o ciclo real na sua conta AWS:
 
 ## 6. Antes × Depois
 
-Medições realizadas na mesma máquina (Linux x86_64, Docker 29.9, OpenTofu 1.13, Trivy 0.75). **Antes** = commit `dd249e2`; **Depois** = esta versão.
+Verificações realizadas na máquina de desenvolvimento (`Linux x86_64`, `Docker version 29.9.2, build a82e528`, `OpenTofu v1.13.1`, `Trivy 0.75.0`). **Antes** = commit `dd249e2`; **Depois** = esta versão (com método de medição do container Floci detalhado na [§4.1](#41-mudança-de-empacotamento-do-localstack-março2026-e-maturidade-do-floci)).
 
-| Métrica / Critério | Antes (`dd249e2`) | Depois (Reformulado) | Δ / Ganho |
+| Métrica / Critério | Antes (`dd249e2`) | Depois (Reformulado) | Δ / Ganho Verificado |
 |---|---|---|---|
 | **Arquivos na raiz correta do repositório** | ❌ Dentro de `Documentos/...` | ✅ Raiz padronizada (`modules/`, `environments/`) | Pipeline CI/CD funcional |
-| **Workflow do GitHub Actions** | ❌ 0 bytes (nunca rodou) | ✅ 5 jobs + comentário automático do `plan` no PR | Automação ponta a ponta |
-| **Emulador de Nuvem Local** | LocalStack 4.13 (~1 GB imagem, ~143 MiB RAM idle; imagem atual exige `LOCALSTACK_AUTH_TOKEN`) | **Floci 2.3.0** (~90 MB imagem, **~13 MiB RAM idle**, boot ~24 ms, MIT, sem token) | **−91% RAM ociosa** |
+| **Workflow do GitHub Actions** | ❌ 0 bytes (nunca rodou) | ✅ 4 jobs ativos no CI + comentário automático do `plan` no PR | Automação E2E no emulador |
+| **Emulador de Nuvem Local** | `localstack/localstack` sem token (a partir da release `2026.03.0` exige `LOCALSTACK_AUTH_TOKEN` obrigatório no startup) | **`floci/floci:2.3.0`** (**`0.673s` boot nativo** via `docker logs`, **`39.11 MiB` RAM ociosa** via `docker stats --no-stream`, **`344,5 MB` imagem** via `docker image inspect`, MIT, sem token) | **Execução local e em CI sem conta externa nem token** |
 | **Misconfigurations no `trivy config`** | **21 falhas** (2 CRITICAL, 11 HIGH, 2 MEDIUM, 6 LOW) | **0 falhas** (0 CRITICAL, 0 HIGH; exceções documentadas) | **−100% misconfigurations** |
 | **Chaves estáticas e senhas no código** | ❌ `access_key = "test"` em 3 arquivos | ✅ **0 chaves estáticas e 0 senhas fixas** (OIDC + `openssl rand` por execução) | Elimina anti-pattern de segurança |
 | **Escopo da Trust Policy e IAM Role** | Sem OIDC / permissões irrestritas | **`sub` restrito a `main`/`production`** + **ações listadas por ARN/tag** (zero `ec2:*`, `rds:*`, `kms:*`, `secretsmanager:*`) | Menor privilégio real |
 | **Lock de State no S3** | Criava tabela DynamoDB redundante | **S3 Lock Nativo (`use_lockfile = true`)** com `.tflock` | Menos 1 serviço para manter |
-| **Banco de Dados provisionado** | ❌ `aws_instance` (EC2 vazia fingindo ser banco) | ✅ **`aws_db_instance` RDS PostgreSQL 17.2 Single-AZ** + Secrets Manager | Fidelidade de declaração IaC |
-| **Camada de Compute & Rede** | 1 EC2 solta + **NAT Gateway** caro | **ALB (`/health/ready`) + ASG (1x EC2) + 3 SGs estritos**, **sem NAT Gateway** | **−US$ 32,85/mês** por AZ |
-| **Governança FinOps (Budgets + Alarmes)** | ❌ Inexistente | ✅ `aws_budgets_budget` + SNS KMS + CloudWatch CPU Alarm | Alertas antes de tudo |
+| **Banco de Dados declarado** | ❌ `aws_instance` (EC2 vazia fingindo ser banco) | ✅ **`aws_db_instance` RDS PostgreSQL 17.2 Single-AZ** + Secrets Manager | Fidelidade de declaração IaC |
+| **Camada de Compute & Rede** | 1 EC2 solta + **NAT Gateway** caro | **ALB (`/health/ready`) + ASG (1x EC2) + 3 SGs estritos**, **sem NAT Gateway** | **−US$ 32,85/mês** por AZ (em tarifa On-Demand AWS) |
+| **Governança FinOps (Budgets + Alarmes)** | ❌ Inexistente | ✅ `aws_budgets_budget` + SNS KMS + CloudWatch CPU Alarm | Alertas declarados antes de tudo |
 
 ---
 
@@ -339,14 +357,15 @@ Como a infraestrutura é efêmera (provisionada para validação e destruída im
 | **Lock do State do Terraform** | Tabela DynamoDB dedicada + KMS | **S3 Lock Nativo (`use_lockfile = true`)** | Simplificação operacional |
 | **Taxa Horária / Mensal Contínua** | **US$ 0,2587/h** (**≈ US$ 188,87/mês**) | **US$ 0,0795/h** (**≈ US$ 58,00/mês** se contínuo; **US$ 0,02** num ciclo de 15 min) | **−69% na taxa horária** |
 
-### 7.3 Elegibilidade de RDS e ALB no Plano de Créditos do AWS Free Tier (Documentação Oficial)
+### 7.3 Mudança do AWS Free Tier em 15/07/2025 (RDS e ALB) e Limite de Verificação Empírica
 
-Para quem abre uma **nova conta AWS** (modelo *Free Account Plan* lançado pela AWS em julho de 2025):
-- A AWS concede **US$ 100 em créditos no cadastro** + até **US$ 100 adicionais** ao completar 5 atividades práticas (incluindo lançar uma instância RDS e configurar o AWS Budgets), totalizando **US$ 200 em créditos válidos por até 6 meses** — fonte oficial: [AWS Free Tier (`https://aws.amazon.com/free/`)](https://aws.amazon.com/free/) e [AWS Billing User Guide — *Using the AWS Free Tier* (`https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-limits.html`)](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-limits.html).
-- **Confirmação sobre RDS e ALB:** Tanto o **Amazon RDS** (`db.t4g.micro` / `db.t3.micro` Single-AZ com 20 GB de armazenamento SSD) quanto o **Elastic Load Balancing / Application Load Balancer (ALB)** (750 horas/mês + 15 LCUs) fazem parte dos serviços elegíveis cobertos pelos créditos e franquias do AWS Free Tier, conforme documentado oficialmente em:
-  - [Amazon RDS Free Tier (`https://aws.amazon.com/rds/free/`)](https://aws.amazon.com/rds/free/)
-  - [Elastic Load Balancing Pricing & Free Tier (`https://aws.amazon.com/elasticloadbalancing/pricing/`)](https://aws.amazon.com/elasticloadbalancing/pricing/)
-- **Atenção aos endereços IPv4 públicos:** Mesmo dentro do Free Tier, endereços IPv4 públicos anexados ao ALB e a instâncias EC2 são tarifados à razão de `US$ 0,005/hora` por IPv4 público (abatidos do saldo de créditos de US$ 100–200 nas contas novas, ou cobrados na fatura em contas antigas) — motivo pelo qual configurar o `aws_budgets_budget` antes de tudo e executar `tofu destroy` ao final do teste é indispensável.
+1. **O que mudou no AWS Free Tier em 15 de julho de 2025 (fim das franquias de 750h/mês para contas novas):**
+   - **Modelo legado (apenas contas criadas *antes* de 15/07/2025):** Durante os primeiros 12 meses, a conta dispunha de franquias mensais em horas (`750 horas/mês` de RDS `db.t3.micro`/`db.t4g.micro` Single-AZ com 20 GB e `750 horas/mês + 15 LCUs` de Application Load Balancer).
+   - **Novo modelo baseado em créditos (contas criadas *a partir* de 15/07/2025):** A AWS encerrou as franquias mensais de 750 horas de 12 meses para novos cadastros e adotou um saldo único de **créditos promocionais** (**US$ 100 no cadastro + até US$ 100 adicionais** ao concluir 5 atividades no console, totalizando até **US$ 200**), dividindo as novas contas em duas modalidades: **Free account plan** (sandbox válido por até 6 meses ou até o consumo dos créditos, sem cobrança em cartão, mas com bloqueio de serviços/recursos restritos) e **Paid account plan** (acesso completo a todos os serviços AWS, abatendo os créditos da fatura On-Demand) — fontes oficiais: [AWS Billing User Guide — *Choosing your AWS account plan*](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/account-plan.html) e [AWS Billing User Guide — *Using the AWS Free Tier*](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-limits.html).
+2. **Como RDS e ALB são tarifados no modelo atual:**
+   - **Nem o Amazon RDS nem o Application Load Balancer (ALB) fazem parte da lista de ~30 serviços *Always Free*.** Em contas novas pós-julho/2025, ambos os recursos são tarifados pelo preço **On-Demand desde a primeira hora** (`US$ 0,0192/h` para o RDS `db.t4g.micro` + 20 GB gp3 e `US$ 0,0405/h` para o ALB + 2 IPv4 públicos), consumindo diretamente o saldo de créditos promocionais (ou gerando cobrança imediata na fatura em contas sem créditos ativos).
+3. **Declaração transparente sobre verificação prática pelo autor:**
+   - Como o autor possui apenas conta AWS antiga (pré-julho/2025, sem créditos ativos) e não abriu uma conta nova para executar `tofu apply` na AWS real, **a elegibilidade prática e eventuais bloqueios de provisionamento de `aws_lb` (ALB) e `aws_db_instance` (RDS) dentro do sandbox restrito do *Free account plan* não foram verificados empiricamente pelo autor em uma conta AWS real**. Por esse motivo, todas as estimativas FinOps da [§7.1](#71-custo-por-ciclo-de-teste-15-min-janela-de-10h-e-referência-de-730h-us-east-1) são calculadas integralmente pela **tarifa cheia On-Demand (`US$ 0,0795/hora`)**, sem pressupor gratuidade.
 
 ---
 
@@ -370,4 +389,4 @@ Para quem abre uma **nova conta AWS** (modelo *Free Account Plan* lançado pela 
 3. **State Encryption Nativo do OpenTofu (`encryption {}` block):** Criptografar o próprio conteúdo do `.tfstate` usando chave KMS antes mesmo de enviá-lo ao S3.
 4. **ECS Fargate Spot ou AWS App Runner:** Para cargas variáveis, substituir o ALB + EC2 por Fargate Spot ou App Runner.
 
----
+
