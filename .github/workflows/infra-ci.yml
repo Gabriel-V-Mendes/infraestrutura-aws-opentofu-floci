@@ -164,7 +164,9 @@ jobs:
 
             const body = [
               marker,
-              '## 🏗️ OpenTofu Plan & FinOps Report (Emulado via Floci)',
+              '## 🏗️ OpenTofu Plan & FinOps Report — OpenTofu validado em emulador (Floci) e plan contra a AWS',
+              '',
+              '> **Escopo:** OpenTofu validado em emulador (Floci) e `plan` contra a AWS (sem `apply` em conta AWS real no CI padrão).',
               '',
               '| Validação | Status | Detalhe |',
               '|---|---|---|',

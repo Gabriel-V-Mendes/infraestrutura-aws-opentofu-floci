@@ -1,5 +1,5 @@
 # ==============================================================================
-# Ambiente: aws-prod (AWS Real com os mesmos módulos validados no Floci)
+# Ambiente: aws-prod (OpenTofu validado em emulador Floci e plan contra a AWS)
 # ==============================================================================
 
 module "storage" {
